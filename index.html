@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Java 7-24: 交互式演进史诗</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals with Subtle Accents -->
+    <!-- Application Structure Plan: The application is designed as a multi-section, single-page dashboard. The core navigation allows users to switch between different "views" of the Java evolution story, rather than a simple chronological scroll. The structure includes: 1) A main "Timeline" view for a high-level overview of releases and their key themes. 2) A "Thematic Deep Dive" section allowing users to explore major evolution pillars (Amber, Loom, Panama, etc.) and see which versions contributed to them. 3) A "Feature Comparator" tool to directly compare features across different LTS versions. 4) A "GC Evolution" view to visualize the advancements in garbage collection. This structure was chosen because the Java evolution is not just linear; it's driven by parallel, long-running projects. A thematic/task-oriented approach allows users to follow a specific interest (e.g., "How did concurrency evolve?") across versions, which is more intuitive for learning and synthesis than a rigid chronological report. -->
+    <!-- Visualization & Content Choices: 
+        - Timeline (Goal: Change): An interactive horizontal timeline built with HTML/CSS/JS. Users can click on a version to see its key features. This is more engaging than a static list. Choice: Custom HTML/CSS/JS.
+        - Key Feature Cards (Goal: Inform): For each version, key features are presented as cards. Clicking a card reveals a detailed explanation. This progressive disclosure prevents information overload. Choice: HTML/CSS/JS.
+        - Project-based Filtering (Goal: Organize/Relationships): Buttons for major projects (Amber, Loom, Panama, Valhalla) allow users to filter the timeline/features to see the contributions of each project over time. This highlights the non-linear, project-driven nature of Java's evolution. Choice: HTML/CSS/JS.
+        - LTS Comparison Chart (Goal: Compare): A dynamic bar chart (Chart.js) allows users to select two LTS versions and visually compare the number of significant new features introduced in key areas (Language, JVM, API). This provides a quick, quantitative comparison. Choice: Chart.js/Canvas.
+        - GC Evolution Diagram (Goal: Change/Organize): A structured HTML/CSS grid layout shows the journey of major GCs (G1, ZGC, Shenandoah) from experimental to production-ready across versions. Color-coding indicates their status. This is clearer than a text description. Choice: HTML/CSS.
+        - Code Snippets (Goal: Inform/Compare): For features like Records vs. POJOs, or Lambdas vs. Anonymous Classes, side-by-side code blocks in HTML with syntax highlighting offer a direct, concrete comparison of the developer experience improvement. Choice: HTML/CSS.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Noto Sans SC', sans-serif; background-color: #FDFBF8; color: #4F4A45; }
+        .bg-warm-base { background-color: #FDFBF8; }
+        .bg-warm-section { background-color: #F5F1ED; }
+        .text-warm-primary { color: #4F4A45; }
+        .text-warm-secondary { color: #6C6661; }
+        .border-warm-subtle { border-color: #E7E2DD; }
+        .accent-color { color: #C08261; }
+        .accent-bg { background-color: #C08261; }
+        .accent-bg-hover:hover { background-color: #A96E4F; }
+        .lts-badge { background-color: #9A8B7A; color: white; }
+        .preview-badge { background-color: #A96E4F; color: white; }
+        .final-badge { background-color: #6C6661; color: white; }
+        .nav-button { transition: all 0.3s ease; border-bottom: 2px solid transparent; }
+        .nav-button.active { color: #C08261; border-bottom-color: #C08261; }
+        .nav-button:hover { color: #A96E4F; }
+        .timeline-item { cursor: pointer; transition: all 0.3s ease; }
+        .timeline-item.active { transform: translateY(-5px); border-color: #C08261; }
+        .feature-card { transition: all 0.3s ease; border: 1px solid #E7E2DD; }
+        .feature-card:hover { transform: translateY(-3px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+        .content-section { display: none; }
+        .content-section.active { display: block; }
+        .chart-container { position: relative; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; height: 350px; max-height: 50vh; }
+        @media (min-width: 768px) { .chart-container { height: 450px; } }
+        .code-block { background-color: #2D2D2D; color: #EAEAEA; font-family: 'Courier New', Courier, monospace; white-space: pre-wrap; word-wrap: break-word; }
+        .code-block .keyword { color: #CC7832; }
+        .code-block .type { color: #A9B7C6; }
+        .code-block .string { color: #6A8759; }
+        .code-block .comment { color: #808080; }
+        .code-block .annotation { color: #BBB529; }
+    </style>
+</head>
+<body class="bg-warm-base text-warm-primary">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold mb-2">Java 演进史诗</h1>
+            <p class="text-lg text-warm-secondary">一场从 Java 7 到 Java 24 的交互式探索之旅</p>
+        </header>
+
+        <nav class="flex justify-center border-b border-warm-subtle mb-8">
+            <button class="nav-button py-4 px-6 text-lg font-medium active" data-section="timeline">演进时间线</button>
+            <button class="nav-button py-4 px-6 text-lg font-medium" data-section="themes">重大项目剖析</button>
+            <button class="nav-button py-4 px-6 text-lg font-medium" data-section="comparator">LTS 版本对比</button>
+            <button class="nav-button py-4 px-6 text-lg font-medium" data-section="gc">GC 进化论</button>
+        </nav>
+
+        <main>
+            <!-- Section 1: Timeline -->
+            <section id="timeline" class="content-section active">
+                 <div class="text-center mb-8 p-6 bg-warm-section rounded-xl">
+                    <h2 class="text-2xl font-bold mb-2 accent-color">演进时间线</h2>
+                    <p class="text-warm-secondary max-w-3xl mx-auto">
+                        本节提供了一个 Java 从版本 7 到 24 的完整发布时间线。您可以点击每个版本来查看其关键特性和引入背景。通过上方的“项目筛选”按钮，可以高亮显示与特定重大项目（如 Amber, Loom）相关的特性，从而清晰地看到这些长期项目是如何在不同版本中逐步推进并最终改变 Java 平台的。
+                    </p>
+                </div>
+                
+                <div class="text-center mb-8">
+                    <span class="font-bold mr-4">项目筛选:</span>
+                    <button class="project-filter-btn all active px-4 py-2 rounded-full text-sm font-semibold bg-gray-200" data-project="all">全部</button>
+                    <button class="project-filter-btn amber px-4 py-2 rounded-full text-sm font-semibold bg-orange-100 text-orange-800" data-project="Amber">Project Amber</button>
+                    <button class="project-filter-btn loom px-4 py-2 rounded-full text-sm font-semibold bg-blue-100 text-blue-800" data-project="Loom">Project Loom</button>
+                    <button class="project-filter-btn panama px-4 py-2 rounded-full text-sm font-semibold bg-green-100 text-green-800" data-project="Panama">Project Panama</button>
+                     <button class="project-filter-btn valhalla px-4 py-2 rounded-full text-sm font-semibold bg-purple-100 text-purple-800" data-project="Valhalla">Project Valhalla</button>
+                </div>
+
+                <div id="timeline-container" class="overflow-x-auto pb-4">
+                    <div class="flex space-x-4 min-w-max p-4">
+                        <!-- Timeline items will be injected by JS -->
+                    </div>
+                </div>
+
+                <div id="feature-display" class="mt-8 p-6 bg-warm-section rounded-xl min-h-[300px]">
+                    <h3 id="version-title" class="text-2xl font-bold text-warm-primary mb-4">请选择一个 Java 版本</h3>
+                    <div id="feature-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Feature cards will be injected by JS -->
+                    </div>
+                </div>
+                
+                <div id="feature-detail-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden">
+                    <div class="bg-warm-base rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8 relative">
+                         <button id="close-modal-btn" class="absolute top-4 right-4 text-warm-secondary hover:text-warm-primary text-2xl">&times;</button>
+                         <div id="modal-content"></div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- Section 2: Themes -->
+            <section id="themes" class="content-section">
+                <div class="text-center mb-8 p-6 bg-warm-section rounded-xl">
+                    <h2 class="text-2xl font-bold mb-2 accent-color">重大项目剖析</h2>
+                    <p class="text-warm-secondary max-w-3xl mx-auto">
+                        现代 Java 的演进由几个关键的长期项目驱动。本节深入剖析这些项目，解释它们的目标、解决的核心问题以及它们如何通过一系列 JEP (JDK Enhancement Proposals) 逐步改变 Java 的面貌。点击下方的项目名称，可以了解其完整的愿景和技术路径。
+                    </p>
+                </div>
+
+                <div id="project-details" class="space-y-8">
+                     <!-- Project details will be injected by JS -->
+                </div>
+
+            </section>
+
+            <!-- Section 3: Comparator -->
+            <section id="comparator" class="content-section">
+                 <div class="text-center mb-8 p-6 bg-warm-section rounded-xl">
+                    <h2 class="text-2xl font-bold mb-2 accent-color">LTS 版本对比</h2>
+                    <p class="text-warm-secondary max-w-3xl mx-auto">
+                        长期支持 (LTS) 版本是企业应用的关键基石。这个交互式工具允许您选择任意两个 LTS 版本，直观地对比它们在语言、JVM 和核心 API 层面引入的重大特性数量。这有助于理解从一个 LTS 升级到另一个 LTS 所能带来的价值。
+                    </p>
+                </div>
+
+                <div class="flex justify-center items-center space-x-4 mb-8">
+                    <select id="lts-select-1" class="p-2 border border-warm-subtle rounded-md bg-white"></select>
+                    <span class="font-bold text-warm-secondary">对比</span>
+                    <select id="lts-select-2" class="p-2 border border-warm-subtle rounded-md bg-white"></select>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="lts-comparison-chart"></canvas>
+                </div>
+            </section>
+
+            <!-- Section 4: GC Evolution -->
+            <section id="gc" class="content-section">
+                 <div class="text-center mb-8 p-6 bg-warm-section rounded-xl">
+                    <h2 class="text-2xl font-bold mb-2 accent-color">GC 进化论</h2>
+                    <p class="text-warm-secondary max-w-3xl mx-auto">
+                        垃圾收集 (GC) 是 JVM 的核心，其性能直接影响应用的延迟和吞吐量。本节以可视化的方式展示了 G1, Shenandoah, 和 ZGC 等现代垃圾收集器从实验性引入到最终成熟并成为生产就绪选项的演进历程。
+                    </p>
+                </div>
+                 <div class="overflow-x-auto">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- G1 -->
+                        <div class="bg-white p-6 rounded-lg shadow">
+                           <h3 class="text-xl font-bold mb-4 text-center accent-color">G1 (Garbage-First)</h3>
+                           <ul class="space-y-3">
+                                <li class="flex items-center"><span class="preview-badge text-xs font-bold mr-3 px-2 py-1 rounded-full">引入</span><span class="font-semibold mr-2">Java 7:</span> 实验性引入，作为 CMS 的替代方案。</li>
+                                <li class="flex items-center"><span class="final-badge text-xs font-bold mr-3 px-2 py-1 rounded-full">默认</span><span class="font-semibold mr-2">Java 9:</span> 成为默认服务器 GC。</li>
+                                <li class="flex items-center"><span class="final-badge text-xs font-bold mr-3 px-2 py-1 rounded-full">增强</span><span class="font-semibold mr-2">Java 10:</span> 并行化 Full GC，改善最坏情况延迟。</li>
+                                <li class="flex items-center"><span class="final-badge text-xs font-bold mr-3 px-2 py-1 rounded-full">增强</span><span class="font-semibold mr-2">Java 14:</span> NUMA-aware 内存分配，优化大内存服务器性能。</li>
+                           </ul>
+                        </div>
+                        <!-- Shenandoah -->
+                        <div class="bg-white p-6 rounded-lg shadow">
+                           <h3 class="text-xl font-bold mb-4 text-center accent-color">Shenandoah</h3>
+                           <ul class="space-y-3">
+                                <li class="flex items-center"><span class="preview-badge text-xs font-bold mr-3 px-2 py-1 rounded-full">引入</span><span class="font-semibold mr-2">Java 12:</span> 实验性引入，主打超低暂停时间。</li>
+                                <li class="flex items-center"><span class="final-badge text-xs font-bold mr-3 px-2 py-1 rounded-full">生产</span><span class="font-semibold mr-2">Java 15:</span> 宣布生产就绪。</li>
+                                <li class="flex items-center"><span class="final-badge text-xs font-bold mr-3 px-2 py-1 rounded-full">增强</span><span class="font-semibold mr-2">持续:</span> 在各版本中持续优化并发处理和性能。</li>
+                           </ul>
+                        </div>
+                        <!-- ZGC -->
+                        <div class="bg-white p-6 rounded-lg shadow">
+                           <h3 class="text-xl font-bold mb-4 text-center accent-color">ZGC (Z Garbage Collector)</h3>
+                           <ul class="space-y-3">
+                                <li class="flex items-center"><span class="preview-badge text-xs font-bold mr-3 px-2 py-1 rounded-full">引入</span><span class="font-semibold mr-2">Java 11:</span> 实验性引入，目标为 TB 级堆和亚毫秒级暂停。</li>
+                                <li class="flex items-center"><span class="final-badge text-xs font-bold mr-3 px-2 py-1 rounded-full">增强</span><span class="font-semibold mr-2">Java 13:</span> 支持返还未使用内存给操作系统。</li>
+                                <li class="flex items-center"><span class="final-badge text-xs font-bold mr-3 px-2 py-1 rounded-full">生产</span><span class="font-semibold mr-2">Java 15:</span> 宣布生产就绪。</li>
+                                <li class="flex items-center"><span class="final-badge text-xs font-bold mr-3 px-2 py-1 rounded-full">增强</span><span class="font-semibold mr-2">持续:</span> 持续改进并发性和可伸缩性。</li>
+                           </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const data = {
+        versions: [
+            { v: 7, lts: true, year: 2011, theme: "现代化序章", projects: [], features: [
+                { name: "Project Coin: try-with-resources", desc: "自动管理资源，简化代码，防止资源泄露。", code: { before: `// Java 7 之前\nBufferedReader br = null;\ntry {\n    br = new BufferedReader(new FileReader("file.txt"));\n    System.out.println(br.readLine());\n} finally {\n    if (br != null) br.close();\n}`, after: `// Java 7\ntry (BufferedReader br = new BufferedReader(new FileReader("file.txt"))) {\n    System.out.println(br.readLine());\n}` } },
+                { name: "Project Coin: 菱形操作符", desc: "泛型实例化时进行类型推断，减少冗余代码。", code: { before: `Map<String, List<String>> map = new HashMap<String, List<String>>();`, after: `Map<String, List<String>> map = new HashMap<>();` } },
+                { name: "Project Coin: switch 支持 String", desc: "switch 语句可以直接用于字符串，代码更简洁。", code: { before: `if (day.equals("MONDAY")) {\n  // ...\n} else if (day.equals("TUESDAY")) {\n  // ...\n}`, after: `switch (day) {\n  case "MONDAY": // ...\n    break;\n  case "TUESDAY": // ...\n    break;\n}` } },
+                { name: "NIO.2 API", desc: "全新的文件系统API (`java.nio.file`)，提供了更强大、更灵活的文件操作能力。" },
+                { name: "Fork/Join 框架", desc: "用于并行任务处理的框架，是 Java 8 并行流的基础。" },
+                { name: "invokedynamic", desc: "JVM 指令，为动态语言和 Lambda 表达式提供底层支持，是 Java 平台演进的关键一步。" }
+            ]},
+            { v: 8, lts: true, year: 2014, theme: "函数式革命", projects: ["Amber"], features: [
+                { name: "Lambda 表达式", desc: "引入函数式编程核心特性，极大简化了匿名内部类的使用。", code: { before: `new Thread(new Runnable() {\n    public void run() {\n        System.out.println("Hello");\n    }\n}).start();`, after: `new Thread(() -> System.out.println("Hello")).start();` } },
+                { name: "Stream API", desc: "提供声明式、函数式风格的集合处理能力，支持链式操作和并行处理。", code: { before: `List<String> results = new ArrayList<>();\nfor (String s : list) {\n    if (s.startsWith("a")) {\n        results.add(s.toUpperCase());\n    }\n}`, after: `List<String> results = list.stream()\n    .filter(s -> s.startsWith("a"))\n    .map(String::toUpperCase)\n    .collect(Collectors.toList());` } },
+                { name: "新的日期和时间 API (JSR 310)", desc: "引入 `java.time` 包，提供不可变、线程安全的日期时间处理类，取代旧的 `Date` 和 `Calendar`。" },
+                { name: "接口的默认方法", desc: "允许在接口中添加具有默认实现的方法，实现了库的平滑演进。" },
+                { name: "Optional<T>", desc: "一个容器类，用于优雅地处理可能为 null 的值，避免 NullPointerException。" },
+                { name: "移除永久代 (PermGen)", desc: "JVM 内存结构变更，由元空间 (Metaspace) 取代，解决了 PermGen 空间溢出问题。" }
+            ]},
+            { v: 9, lts: false, year: 2017, theme: "模块化元年", projects: [], features: [
+                { name: "Java 平台模块系统 (JPMS)", desc: "引入模块化 (`module-info.java`)，解决类路径地狱，提供强封装和可伸缩性。" },
+                { name: "JShell: Java REPL", desc: "官方交互式编程环境，便于快速测试代码和学习新 API。" },
+                { name: "集合工厂方法", desc: "提供 `List.of()`, `Set.of()`, `Map.of()` 等方法，方便创建不可变集合。" },
+                { name: "Stream API 增强", desc: "增加了 `takeWhile`, `dropWhile`, `ofNullable` 等实用的流操作。" },
+                { name: "G1 成为默认 GC", desc: "Garbage-First 垃圾收集器成为服务器端默认 GC，旨在提供更可预测的停顿时间。" }
+            ]},
+            { v: 10, lts: false, year: 2018, theme: "var登场", projects: ["Amber"], features: [
+                { name: "局部变量类型推断 (var)", desc: "引入 `var` 关键字，编译器可自动推断局部变量类型，减少样板代码。", code: { before: `String message = "Hello, Java 10!";`, after: `var message = "Hello, Java 10!";` } },
+                { name: "应用类数据共享 (AppCDS)", desc: "扩展 CDS，允许共享应用类，以减少启动时间和内存占用。" },
+                { name: "G1 的并行 Full GC", desc: "改善 G1 在最坏情况下的停顿时间。" }
+            ]},
+            { v: 11, lts: true, year: 2018, theme: "新LTS与API标准化", projects: ["Amber"], features: [
+                { name: "HTTP 客户端 (标准化)", desc: "提供现代、支持 HTTP/2 和 WebSocket 的异步 HTTP 客户端 API。" },
+                { name: "Lambda 参数的 `var` 语法", desc: "允许在 Lambda 参数中使用 `var`，以便添加注解。" },
+                { name: "JFR 开源", desc: "Java Flight Recorder 开源，为所有开发者提供低开销的生产环境问题诊断工具。" },
+                { name: "新的 String 和 File 方法", desc: "增加了如 `String.isBlank()`, `String.lines()`, `Files.readString()` 等便捷方法。" },
+                { name: "Epsilon: 无操作 GC (实验性)", desc: "引入一个不执行垃圾回收的 GC，用于性能基准测试和超低延迟场景。" },
+                { name: "移除 Java EE 和 CORBA 模块", desc: "精简 JDK，将企业级模块解耦，需作为外部依赖添加。" }
+            ]},
+             { v: 12, lts: false, year: 2019, theme: "Switch 表达式初探", projects: ["Amber"], features: [
+                { name: "Switch 表达式 (预览)", desc: "引入新的 `switch` 语法，可作为表达式返回值，且无需 `break`，代码更安全简洁。" },
+                { name: "Shenandoah GC (实验性)", desc: "引入 Red Hat 主导的低暂停时间 GC，目标是暂停时间与堆大小无关。" }
+            ]},
+             { v: 13, lts: false, year: 2019, theme: "文本块与Socket重塑", projects: ["Amber"], features: [
+                { name: "文本块 (预览)", desc: "引入 `\"\"\"` 语法，轻松创建多行字符串，如 JSON、SQL 等。", code: { before: `String json = "{\\n" +\n"  \\"name\\": \\"Java\\",\\n" +\n"  \\"version\\": 13\\n" +\n"}";`, after: `String json = """\n  {\n    "name": "Java",\n    "version": 13\n  }\n  """;` } },
+                { name: "Switch 表达式 (二次预览)", desc: "根据反馈，使用 `yield` 关键字从 `switch` 块返回值，语法更清晰。" },
+                { name: "重写遗留 Socket API", desc: "现代化 `Socket` 和 `ServerSocket` 的底层实现，为虚拟线程铺路。" },
+                { name: "ZGC: 返还未使用内存", desc: "增强 ZGC，使其能将不活动的堆内存返还给操作系统，优化资源利用。" }
+            ]},
+             { v: 14, lts: false, year: 2020, theme: "Records与模式匹配", projects: ["Amber"], features: [
+                { name: "Records (预览)", desc: "引入 `record` 关键字，作为不可变数据的透明载体，极大减少 DTO/POJO 的样板代码。", code: { before: `// 约 30-40 行的 POJO 定义\npublic final class Point { ... }`, after: `public record Point(int x, int y) {}` } },
+                { name: "instanceof 的模式匹配 (预览)", desc: "简化 `instanceof` 类型检查和转换，代码更简洁安全。", code: { before: `if (obj instanceof String) {\n    String s = (String) obj;\n    // ...\n}`, after: `if (obj instanceof String s) {\n    // ...\n}` } },
+                { name: "Switch 表达式 (正式)", desc: "经过两轮预览，Switch 表达式成为标准特性。" },
+                { name: "实用的 NullPointerExceptions", desc: "JEP 358: 改进 NPE 的错误信息，精确指出哪个变量是 null。" }
+            ]},
+             { v: 15, lts: false, year: 2020, theme: "Sealed Classes", projects: ["Amber"], features: [
+                { name: "Sealed Classes (预览)", desc: "引入 `sealed` 和 `permits` 关键字，允许作者精确控制一个类或接口可以有哪些子类。" },
+                { name: "文本块 (正式)", desc: "文本块成为标准语言特性。" },
+                { name: "ZGC 和 Shenandoah (正式)", desc: "两大低暂停时间 GC 宣布生产就绪，不再是实验性特性。" },
+                { name: "隐藏类", desc: "提供一种创建无法被直接发现和链接的类的方式，主要供框架使用。" }
+            ]},
+             { v: 16, lts: false, year: 2021, theme: "模式匹配成熟", projects: ["Amber", "Panama"], features: [
+                { name: "Records (正式)", desc: "Records 成为标准语言特性。" },
+                { name: "instanceof 的模式匹配 (正式)", desc: "instanceof 的模式匹配成为标准语言特性。" },
+                { name: "Vector API (孵化)", desc: "提供一个 API，用于表达能在运行时可靠编译为最佳矢量硬件指令的矢量计算。" },
+                { name: "外部链接器 API (孵化)", desc: "Project Panama 的成果，提供对本地代码的静态类型、纯 Java 访问。" }
+            ]},
+             { v: 17, lts: true, year: 2021, theme: "新LTS与模式匹配增强", projects: ["Amber"], features: [
+                { name: "Sealed Classes (正式)", desc: "密封类成为标准语言特性，为模式匹配提供穷尽性检查基础。" },
+                { name: "switch 的模式匹配 (预览)", desc: "将模式匹配能力扩展到 `switch` 语句和表达式，功能更强大。" },
+                { name: "移除 AOT 和 JIT 编译器", desc: "移除了实验性的 GraalVM AOT/JIT 编译器，鼓励使用独立的 GraalVM 发行版。" },
+                { name: "增强的伪随机数生成器", desc: "提供新的接口类型和实现，包括可跳转的 PRNG 和可分割的 PRNG 算法 (LXM)。" },
+                { name: "macOS/AArch64 移植", desc: "为苹果 Apple Silicon 提供了新的平台移植。" }
+            ]},
+             { v: 18, lts: false, year: 2022, theme: "代码片段与UTF-8", projects: [], features: [
+                { name: "默认 UTF-8", desc: "将 UTF-8 设为标准 Java API 的默认字符集，增强跨平台一致性。" },
+                { name: "简单 Web 服务器", desc: "提供一个用于原型设计和测试的命令行静态文件 Web 服务器。" },
+                { name: "@snippet Javadoc 标签", desc: "在 Javadoc 中引入 `@snippet` 标签，用于包含示例源代码。" }
+            ]},
+             { v: 19, lts: false, year: 2022, theme: "虚拟线程与FFM初探", projects: ["Loom", "Panama", "Amber"], features: [
+                { name: "虚拟线程 (预览)", desc: "Project Loom 核心成果。引入轻量级线程，极大简化高吞吐量并发应用的编写。" },
+                { name: "结构化并发 (孵化)", desc: "Project Loom 的另一成果。提供 API 将不同线程中运行的多个任务视为一个工作单元，简化错误处理和取消。" },
+                { name: "外部函数与内存 API (预览)", desc: "Project Panama 核心成果。提供一个 API，使 Java 程序能与 JVM 运行时之外的代码和数据互操作。" },
+                { name: "switch 的模式匹配 (二次预览)", desc: "继续完善 switch 的模式匹配功能。" }
+            ]},
+            { v: 20, lts: false, year: 2023, theme: "Loom与Panama二进", projects: ["Loom", "Panama", "Amber", "Valhalla"], features: [
+                { name: "虚拟线程 (二次预览)", desc: "根据反馈对虚拟线程 API 进行改进。" },
+                { name: "结构化并发 (二次孵化)", desc: "继续孵化结构化并发 API。" },
+                { name: "外部函数与内存 API (二次预览)", desc: "继续完善 FFM API。" },
+                { name: "Record 模式 (预览)", desc: "增强模式匹配，以解构记录实例。允许更声明式的数据导航和处理。" }
+            ]},
+             { v: 21, lts: true, year: 2023, theme: "虚拟线程正式登场", projects: ["Loom", "Panama", "Amber"], features: [
+                { name: "虚拟线程 (正式)", desc: "虚拟线程成为标准特性，是 Java 并发编程模型的重大变革。" },
+                { name: "switch 的模式匹配 (正式)", desc: "模式匹配成为 switch 的标准特性。" },
+                { name: "Record 模式 (正式)", desc: "解构 Record 的模式匹配成为标准特性。" },
+                { name: "序列化集合", desc: "引入新的接口 `SequencedCollection`, `SequencedSet`, `SequencedMap`，提供统一的、定义明确的元素顺序访问方法。" },
+                { name: "结构化并发 (二次预览)", desc: "结构化并发进入第二次预览。" },
+                { name: "外部函数与内存 API (第三次预览)", desc: "FFM API 进入第三次预览。" }
+            ]},
+            { v: 22, lts: false, year: 2024, theme: "Project Amber持续发力", projects: ["Amber", "Loom", "Panama"], features: [
+                { name: "未命名变量和模式 (正式)", desc: "允许使用下划线 `_` 作为未命名变量或模式，用于表示不关心的变量，简化代码。" },
+                { name: "语句前的 super(...) (预览)", desc: "放宽 Java 构造函数中 `super()` 必须是第一条语句的限制。" },
+                { name: "字符串模板 (二次预览)", desc: "继续完善字符串模板功能。" },
+                { name: "结构化并发 (第二次孵化)", desc: "注意: JEP 462, 结构化并发(第二次预览),不是孵化" },
+                { name: "外部函数与内存 API (正式)", desc: "FFM API 成为标准特性。" }
+            ]},
+            { v: 23, lts: false, year: 2024, theme: "模板与类库雏形", projects: ["Amber", "Valhalla"], features: [
+                { name: "字符串模板 (正式)", desc: "字符串模板成为标准特性，提供更安全、更强大的字符串拼接方式。" },
+                { name: "基元类型的模式匹配 (预览)", desc: "将模式匹配扩展到所有基元类型。" },
+                { name: "类文件 API (预览)", desc: "提供用于解析、生成和转换 Java 类文件的标准 API。" },
+                { name: "模块导入声明 (预览)", desc: "简化跨模块导入单个类的语法。" }
+            ]},
+            { v: 24, lts: false, year: 2025, theme: "未来展望", projects: ["Amber", "Valhalla"], features: [
+                { name: "通用泛型 (预览)", desc: "Project Valhalla 的重要里程碑，允许泛型对基元类型和引用类型进行抽象。" },
+                { name: "Record 模式的扩展 (预览)", desc: "进一步增强 Record 模式匹配的能力。" }
+            ]}
+        ],
+        projects: {
+            "Amber": { color: "orange", desc: "专注于通过演进 Java 语言特性来提高开发人员的生产力。主要贡献包括 `var`、`switch` 表达式、文本块、Records、Sealed Classes 和模式匹配等。目标是减少样板代码，提高代码的可读性和可维护性。" },
+            "Loom": { color: "blue", desc: "旨在通过向 Java 平台引入轻量级用户模式线程（虚拟线程）、定界延续和结构化并发，来大幅简化高吞吐量并发应用的编写、维护和观察。这是对 Java 传统线程模型的一次革命性变革。" },
+            "Panama": { color: "green", desc: "旨在改进和丰富 Java 与“外部”世界（即非 Java API，通常是 C 库）的连接。其核心成果是外部函数与内存 API (FFM API)，它提供了一种安全、高效、纯 Java 的方式来调用本地函数和访问本地内存，以取代脆弱且不受支持的 JNI。" },
+            "Valhalla": { color: "purple", desc: "一个雄心勃勃的项目，旨在通过增强 Java 泛型系统（值对象、基元类、通用泛型等）来改进 Java 的内存布局和性能，使其能更好地与现代硬件对齐。目标是让 Java 既能保持其抽象能力，又能获得接近本地语言的性能。" }
+        },
+        ltsVersions: [8, 11, 17, 21]
+    };
+
+    const timelineContainer = document.getElementById('timeline-container').querySelector('.flex');
+    const featureDisplay = document.getElementById('feature-display');
+    const versionTitle = document.getElementById('version-title');
+    const featureList = document.getElementById('feature-list');
+    const navButtons = document.querySelectorAll('.nav-button');
+    const contentSections = document.querySelectorAll('.content-section');
+    const ltsSelect1 = document.getElementById('lts-select-1');
+    const ltsSelect2 = document.getElementById('lts-select-2');
+    const projectFilterBtns = document.querySelectorAll('.project-filter-btn');
+    const modal = document.getElementById('feature-detail-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const modalContent = document.getElementById('modal-content');
+    const projectDetailsContainer = document.getElementById('project-details');
+
+    let ltsComparisonChart;
+
+    function init() {
+        populateTimeline();
+        populateProjects();
+        populateLTSSelectors();
+        setupEventListeners();
+        showVersion(8); // Show Java 8 by default
+        updateLTSComparisonChart();
+    }
+    
+    function populateProjects() {
+        Object.entries(data.projects).forEach(([name, details]) => {
+            const projectEl = document.createElement('div');
+            projectEl.className = 'p-6 rounded-lg bg-white shadow';
+            projectEl.innerHTML = `
+                <h3 class="text-xl font-bold mb-2 project-name-${details.color}">${name}</h3>
+                <p class="text-warm-secondary">${details.desc}</p>
+            `;
+            projectDetailsContainer.appendChild(projectEl);
+        });
+        const style = document.createElement('style');
+        style.innerHTML = Object.entries(data.projects).map(([name, details]) => 
+            `.project-name-${details.color} { color: ${details.color === 'orange' ? '#C08261' : details.color}; }`
+        ).join('\n');
+        document.head.appendChild(style);
+    }
+
+    function populateTimeline() {
+        timelineContainer.innerHTML = '';
+        data.versions.forEach(version => {
+            const item = document.createElement('div');
+            item.className = 'timeline-item flex-shrink-0 w-28 text-center p-4 border-b-4 border-transparent';
+            item.dataset.version = version.v;
+            item.innerHTML = `
+                <div class="text-2xl font-bold">${version.v}</div>
+                <div class="text-sm text-warm-secondary">${version.year}</div>
+                ${version.lts ? '<div class="lts-badge text-xs font-bold mt-2 px-2 py-1 rounded-full inline-block">LTS</div>' : ''}
+            `;
+            timelineContainer.appendChild(item);
+        });
+    }
+
+    function showVersion(v) {
+        const versionData = data.versions.find(ver => ver.v === v);
+        if (!versionData) return;
+        
+        document.querySelectorAll('.timeline-item').forEach(el => el.classList.remove('active'));
+        document.querySelector(`.timeline-item[data-version='${v}']`).classList.add('active');
+
+        versionTitle.textContent = `Java ${versionData.v}: ${versionData.theme}`;
+        featureList.innerHTML = '';
+        versionData.features.forEach(feature => {
+            const card = document.createElement('div');
+            card.className = 'feature-card bg-white p-4 rounded-lg shadow-sm cursor-pointer';
+            
+            let projectIndicator = '';
+            for (const proj in data.projects) {
+                if (feature.desc.toLowerCase().includes(proj.toLowerCase()) || (versionData.projects && versionData.projects.includes(proj))) {
+                     projectIndicator = `<div class="w-3 h-3 rounded-full bg-${data.projects[proj].color}-500 mb-2" title="Project ${proj}"></div>`;
+                     break;
+                }
+            }
+
+            card.innerHTML = `
+                ${projectIndicator}
+                <h4 class="font-bold text-warm-primary">${feature.name}</h4>
+                <p class="text-sm text-warm-secondary mt-1">${feature.desc.split('.')[0]}.</p>
+            `;
+            card.addEventListener('click', () => showFeatureDetail(feature));
+            featureList.appendChild(card);
+        });
+    }
+
+    function showFeatureDetail(feature) {
+        let codeHtml = '';
+        if (feature.code) {
+             codeHtml = `
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h5 class="font-semibold text-warm-secondary mb-2">之前</h5>
+                        <div class="code-block p-4 rounded-md text-sm">${formatCode(feature.code.before)}</div>
+                    </div>
+                     <div>
+                        <h5 class="font-semibold text-warm-secondary mb-2">之后 (更简洁)</h5>
+                        <div class="code-block p-4 rounded-md text-sm">${formatCode(feature.code.after)}</div>
+                    </div>
+                </div>
+            `;
+        }
+        modalContent.innerHTML = `
+            <h3 class="text-2xl font-bold mb-2 accent-color">${feature.name}</h3>
+            <p class="text-warm-secondary mb-4">${feature.desc}</p>
+            ${codeHtml}
+        `;
+        modal.classList.remove('hidden');
+    }
+    
+    function formatCode(code) {
+        return code
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\b(public|class|final|void|new|try|catch|finally|switch|case|break|if|else|return|record|sealed|permits|non-sealed|var|yield)\b/g, '<span class="keyword">$&</span>')
+            .replace(/\b(String|List|Map|HashMap|BufferedReader|FileReader|System|Runnable|Thread|Integer)\b/g, '<span class="type">$&</span>')
+            .replace(/("[^"]*")/g, '<span class="string">$&</span>')
+            .replace(/(\/\/.*)/g, '<span class="comment">$&</span>')
+            .replace(/(@[A-Za-z]+)/g, '<span class="annotation">$&</span>');
+    }
+
+    function closeModal() {
+        modal.classList.add('hidden');
+    }
+
+    function populateLTSSelectors() {
+        data.ltsVersions.forEach(v => {
+            const option1 = document.createElement('option');
+            option1.value = v;
+            option1.textContent = `Java ${v}`;
+            ltsSelect1.appendChild(option1);
+
+            const option2 = document.createElement('option');
+            option2.value = v;
+            option2.textContent = `Java ${v}`;
+            ltsSelect2.appendChild(option2);
+        });
+        ltsSelect1.value = 8;
+        ltsSelect2.value = 11;
+    }
+
+    function getFeatureCounts(startV, endV) {
+        const counts = { 'Language': 0, 'JVM/Runtime': 0, 'Core API': 0 };
+        const langKeywords = ['lambda', 'record', 'pattern', 'switch', 'var', 'text block', 'sealed'];
+        const jvmKeywords = ['gc', 'g1', 'zgc', 'shenandoah', 'cds', 'jfr', 'permgen', 'metaspace', 'aot', 'jit', 'invokedynamic'];
+        
+        data.versions.filter(v => v.v > startV && v.v <= endV).forEach(version => {
+            version.features.forEach(feature => {
+                const nameLower = feature.name.toLowerCase();
+                if (langKeywords.some(k => nameLower.includes(k))) {
+                    counts['Language']++;
+                } else if (jvmKeywords.some(k => nameLower.includes(k))) {
+                    counts['JVM/Runtime']++;
+                } else {
+                    counts['Core API']++;
+                }
+            });
+        });
+        return counts;
+    }
+
+    function updateLTSComparisonChart() {
+        const v1 = parseInt(ltsSelect1.value);
+        const v2 = parseInt(ltsSelect2.value);
+        
+        const startV = Math.min(v1, v2);
+        const endV = Math.max(v1, v2);
+        
+        const featureCounts = getFeatureCounts(startV, endV);
+
+        const chartData = {
+            labels: Object.keys(featureCounts),
+            datasets: [{
+                label: `从 Java ${startV} 到 Java ${endV} 的重大特性`,
+                data: Object.values(featureCounts),
+                backgroundColor: ['rgba(192, 130, 97, 0.6)', 'rgba(154, 139, 122, 0.6)', 'rgba(108, 102, 97, 0.6)'],
+                borderColor: ['#C08261', '#9A8B7A', '#6C6661'],
+                borderWidth: 1
+            }]
+        };
+
+        if (ltsComparisonChart) {
+            ltsComparisonChart.data = chartData;
+            ltsComparisonChart.options.plugins.title.text = `从 Java ${startV} 到 Java ${endV} 的重大特性数量`;
+            ltsComparisonChart.update();
+        } else {
+            const ctx = document.getElementById('lts-comparison-chart').getContext('2d');
+            ltsComparisonChart = new Chart(ctx, {
+                type: 'bar',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    scales: {
+                        x: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: `从 Java ${startV} 到 Java ${endV} 的重大特性数量`,
+                            font: { size: 16 },
+                            color: '#4F4A45',
+                            padding: { top: 10, bottom: 20 }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    function filterByProject(project) {
+        document.querySelectorAll('.project-filter-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelector(`.project-filter-btn[data-project="${project}"]`).classList.add('active');
+        
+        document.querySelectorAll('.timeline-item').forEach(itemEl => {
+            const v = parseInt(itemEl.dataset.version);
+            const versionData = data.versions.find(ver => ver.v === v);
+            let hasProjectFeature = false;
+            
+            if (project === 'all') {
+                hasProjectFeature = true;
+            } else {
+                if (versionData.projects && versionData.projects.includes(project)) {
+                    hasProjectFeature = true;
+                } else {
+                    hasProjectFeature = versionData.features.some(f => f.desc.toLowerCase().includes(project.toLowerCase()));
+                }
+            }
+
+            if (hasProjectFeature) {
+                itemEl.style.opacity = '1';
+                itemEl.style.transform = 'scale(1)';
+            } else {
+                itemEl.style.opacity = '0.3';
+                itemEl.style.transform = 'scale(0.95)';
+            }
+        });
+    }
+
+    function setupEventListeners() {
+        timelineContainer.addEventListener('click', e => {
+            const target = e.target.closest('.timeline-item');
+            if (target) {
+                showVersion(parseInt(target.dataset.version));
+            }
+        });
+
+        navButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                navButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                
+                contentSections.forEach(section => section.classList.remove('active'));
+                document.getElementById(button.dataset.section).classList.add('active');
+                
+                if (button.dataset.section === 'comparator') {
+                    updateLTSComparisonChart();
+                }
+            });
+        });
+        
+        projectFilterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                filterByProject(btn.dataset.project);
+            });
+        });
+
+        ltsSelect1.addEventListener('change', updateLTSComparisonChart);
+        ltsSelect2.addEventListener('change', updateLTSComparisonChart);
+        
+        closeModalBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+    }
+
+    init();
+});
+</script>
+
+</body>
+</html>
